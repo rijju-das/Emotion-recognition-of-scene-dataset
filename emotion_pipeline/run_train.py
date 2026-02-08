@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
+import pickle
+from pathlib import Path
 
 from .config import Paths, TrainConfig
 from .data.emotion6 import Emotion6Dataset
@@ -15,12 +17,14 @@ def make_transforms(image_size: int, train: bool):
         return transforms.Compose([
             transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0)),
             transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(15),
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ])
     return transforms.Compose([
-        transforms.Resize(image_size + 32),
-        transforms.CenterCrop(image_size),
+        transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)),
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomRotation(15),
         transforms.ToTensor(),
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
@@ -65,6 +69,17 @@ def main():
 
     torch.save(model.state_dict(), "dinov2_emotion_va.pt")
     print("Saved: dinov2_emotion_va.pt")
+    
+    # Save trainer state for later analysis
+    trainer_state = {
+        "train_losses": trainer.state.train_losses,
+        "val_losses": trainer.state.val_losses,
+        "train_accs": trainer.state.train_accs,
+        "val_accs": trainer.state.val_accs,
+    }
+    with open("trainer_state.pkl", "wb") as f:
+        pickle.dump(trainer_state, f)
+    print("Saved: trainer_state.pkl (for loss curve plotting)")
 
 if __name__ == "__main__":
     main()
