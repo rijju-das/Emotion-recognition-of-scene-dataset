@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+import torch
 
 @dataclass(frozen=True)
 class Paths:
@@ -13,11 +14,11 @@ class TrainConfig:
     image_size: int = 224
     batch_size: int = 32
     num_workers: int = 4
-    epochs_probe: int = 30
-    epochs_finetune: int = 100
+    epochs_probe: int = 50
+    epochs_finetune: int = 150
     lr_head: float = 1e-3
-    lr_backbone: float = 2e-5
+    lr_backbone: float = 1e-5
     weight_decay: float = 0.05
-    lam_va: float = 1.0
+    lam_va: float = 2.0
     seed: int = 42
-    device: str = "cuda" #"cuda"  # or "cpu"
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"

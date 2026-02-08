@@ -3,13 +3,14 @@ from torchvision import transforms
 from PIL import Image
 import matplotlib.pyplot as plt
 
+from .config import Paths, TrainConfig
 from emotion_pipeline.models.dinov2_multitask import DinoV2EmotionVA
 from emotion_pipeline.xai.ig_explainer import IntegratedGradientsExplainer
 from emotion_pipeline.xai.gradient_input_explainer import GradientInputExplainer
 from emotion_pipeline.xai.gradcam_explainer import GradCAMExplainer
 from emotion_pipeline.xai.shap_explainer import SHAPSuperpixelExplainer
 
-def load_model(checkpoint_path: str, device: str = "cpu"):
+def load_model(checkpoint_path: str, device: str):
     model = DinoV2EmotionVA(backbone_name="dinov2_vitb14", use_cls_plus_patchmean=True)
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))
     model = model.to(device)
@@ -32,18 +33,24 @@ def visualize_attribution(x: torch.Tensor, attribution: torch.Tensor, title: str
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     
     # Denormalize image
-    x_vis = x[0].permute(1, 2, 0).cpu()
+    x_vis = x[0].permute(1, 2, 0).detach().cpu()
     x_vis = (x_vis * torch.tensor([0.229, 0.224, 0.225]).view(1, 1, 3) + 
              torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3))
-    x_vis = x_vis.clamp(0, 1)
-    
+    x_vis = x_vis.clamp(0, 1).numpy()
+
     axes[0].imshow(x_vis)
     axes[0].set_title("Input Image")
     axes[0].axis("off")
     
     # Attribution heatmap
-    attr_vis = attribution.mean(dim=1)[0].cpu() if attribution.dim() == 4 else attribution.cpu()
-    axes[1].imshow(attr_vis, cmap="RdBu_r")
+    if attribution is None:
+        axes[1].text(0.5, 0.5, "No attribution", ha="center", va="center")
+    else:
+        if attribution.dim() == 4:
+            attr_vis = attribution.mean(dim=1)[0].detach().cpu().numpy()
+        else:
+            attr_vis = attribution.detach().cpu().numpy()
+        axes[1].imshow(attr_vis, cmap="RdBu_r")
     axes[1].set_title(title)
     axes[1].axis("off")
     
@@ -52,9 +59,11 @@ def visualize_attribution(x: torch.Tensor, attribution: torch.Tensor, title: str
     print(f"Saved: xai_{title}.png")
 
 def main():
-    device = "cpu"
+    paths = Paths()
+    cfg = TrainConfig()
+    device = cfg.device
     model = load_model("dinov2_emotion_va.pt", device=device)
-    x = load_and_preprocess_image("Emotion6_new/disgust/1.jpg")
+    x = load_and_preprocess_image(paths.img_root / "joy/1.jpg")
     x = x.to(device)
     
     # Get prediction
