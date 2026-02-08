@@ -37,7 +37,7 @@ def add_soft_labels(df: pd.DataFrame) -> pd.DataFrame:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input_csv", type=str, default="Emotion6_New_groundtruth.csv")
+    ap.add_argument("--input_csv", type=str, default="/home/rdas/color_transfer/Emotion6_New_groundtruth.csv")
     ap.add_argument("--out_dir", type=str, default=".", help="Where to save train/test CSVs")
     ap.add_argument("--test_size", type=float, default=0.2, help="Test split fraction (e.g., 0.2)")
     ap.add_argument("--seed", type=int, default=42, help="Random seed")
