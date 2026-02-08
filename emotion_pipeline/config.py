@@ -10,12 +10,12 @@ class Paths:
 
 @dataclass(frozen=True)
 class TrainConfig:
-    
+
     backbone_name: str = "dinov2_vitl14"  # dinov2_vits14, dinov2_vitb14
     image_size: int = 224
     batch_size: int = 16
     num_workers: int = 4
-    epochs_probe: int = 30
+    epochs_probe: int = 200  # Increased: still improving at epoch 60
     epochs_finetune: int = 40
     lr_head: float = 5e-5
     lr_backbone: float = 1e-6

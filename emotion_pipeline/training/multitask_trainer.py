@@ -24,8 +24,9 @@ class MultiTaskTrainer(BaseTrainer):
         self.device = device
         self.lam_va = lam_va
         self.state = TrainerState()
-        self.checkpoint_dir = Path(checkpoint_dir)
-        self.checkpoint_dir.mkdir(exist_ok=True)
+        self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
+        if self.checkpoint_dir is not None:
+            self.checkpoint_dir.mkdir(exist_ok=True)
 
     def _step(self, batch, train: bool, optimizer=None):
         x, y, va = batch[:3]
@@ -85,9 +86,10 @@ class MultiTaskTrainer(BaseTrainer):
                 no_improve_count = 0
                 best_marker = " ⭐ (best)"
                 
-                # Save best checkpoint
-                checkpoint_path = self.checkpoint_dir / f"best_model_epoch{ep}.pt"
-                torch.save(self.model.state_dict(), checkpoint_path)
+                # Save best model (overwrite)
+                if self.checkpoint_dir is not None:
+                    checkpoint_path = self.checkpoint_dir / "best_model.pt"
+                    torch.save(self.model.state_dict(), checkpoint_path)
             else:
                 no_improve_count += 1
                 best_marker = ""
@@ -115,6 +117,10 @@ class MultiTaskTrainer(BaseTrainer):
         print(f"\n{'='*80}")
         print(f"Training complete. Best val_loss: {self.state.best_val_loss:.4f}")
         print(f"{'='*80}\n")
+
+        if self.checkpoint_dir is not None:
+            final_checkpoint = self.checkpoint_dir / "final_model.pt"
+            torch.save(self.model.state_dict(), final_checkpoint)
 
     def evaluate(self, num_classes: int = 6):
         total_loss = 0.0
