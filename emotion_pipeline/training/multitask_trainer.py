@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from .base import BaseTrainer
-from eval.metrics import Metrics
+from ..eval.metrics import Metrics
 
 @dataclass
 class TrainerState:
