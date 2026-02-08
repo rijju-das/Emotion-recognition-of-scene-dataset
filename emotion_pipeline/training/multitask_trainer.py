@@ -2,25 +2,30 @@ from dataclasses import dataclass, field
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from pathlib import Path
 from .base import BaseTrainer
 from ..eval.metrics import Metrics
 
 @dataclass
 class TrainerState:
     best_val_loss: float = 1e18
+    best_val_acc: float = 0.0
     train_losses: list = field(default_factory=list)
     val_losses: list = field(default_factory=list)
     train_accs: list = field(default_factory=list)
     val_accs: list = field(default_factory=list)
+    best_epoch: int = 0
 
 class MultiTaskTrainer(BaseTrainer):
-    def __init__(self, model, train_loader: DataLoader, test_loader: DataLoader, device: str, lam_va: float):
+    def __init__(self, model, train_loader: DataLoader, test_loader: DataLoader, device: str, lam_va: float, checkpoint_dir: str = "checkpoints"):
         self.model = model.to(device)
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.device = device
         self.lam_va = lam_va
         self.state = TrainerState()
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.checkpoint_dir.mkdir(exist_ok=True)
 
     def _step(self, batch, train: bool, optimizer=None):
         x, y, va = batch[:3]
@@ -44,10 +49,12 @@ class MultiTaskTrainer(BaseTrainer):
 
         return loss.item(), logits.detach(), va_pred.detach(), y.detach(), va.detach()
 
-    def fit(self, optimizer, epochs: int, num_classes: int = 6):
+    def fit(self, optimizer, epochs: int, num_classes: int = 6, patience: int = 20, scheduler=None):
         print(f"\n{'='*80}")
-        print(f"Training for {epochs} epochs | device={self.device}")
+        print(f"Training for {epochs} epochs | device={self.device} | early_stopping_patience={patience} | scheduler={'CosineAnnealingLR' if scheduler else 'None'}")
         print(f"{'='*80}\n")
+        
+        no_improve_count = 0
         
         for ep in range(1, epochs + 1):
             # Training phase: compute loss and train accuracy
@@ -70,11 +77,19 @@ class MultiTaskTrainer(BaseTrainer):
             # Validation phase
             val = self.evaluate(num_classes=num_classes)
             
-            # Track best model
+            # Track best model and early stopping
             if val['loss'] < self.state.best_val_loss:
                 self.state.best_val_loss = val['loss']
+                self.state.best_val_acc = val['acc']
+                self.state.best_epoch = ep
+                no_improve_count = 0
                 best_marker = " ⭐ (best)"
+                
+                # Save best checkpoint
+                checkpoint_path = self.checkpoint_dir / f"best_model_epoch{ep}.pt"
+                torch.save(self.model.state_dict(), checkpoint_path)
             else:
+                no_improve_count += 1
                 best_marker = ""
             
             # Store metrics for later plotting
@@ -87,6 +102,15 @@ class MultiTaskTrainer(BaseTrainer):
             print(f"Epoch {ep:3d}/{epochs} | "
                   f"Train: loss={train_loss_avg:.4f} acc={train_acc:.4f} f1={train_f1:.4f} | "
                   f"Val: loss={val['loss']:.4f} acc={val['acc']:.4f} f1={val['f1']:.4f} rmse_va={val['rmse_va']:.4f}{best_marker}")
+            
+            # Early stopping
+            if no_improve_count >= patience:
+                print(f"\n⭐ Early stopping at epoch {ep} (val loss didn't improve for {patience} epochs)")
+                break
+            
+            # Learning rate scheduling
+            if scheduler is not None:
+                scheduler.step()
         
         print(f"\n{'='*80}")
         print(f"Training complete. Best val_loss: {self.state.best_val_loss:.4f}")

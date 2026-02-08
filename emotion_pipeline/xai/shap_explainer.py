@@ -34,7 +34,7 @@ class SHAPSuperpixelExplainer:
         Returns: dict with 'attributions' (H, W) and 'segments'
         """
         x = x.squeeze(0)  # (C, H, W)
-        x_np = x.permute(1, 2, 0).cpu().numpy()  # (H, W, C)
+        x_np = x.permute(1, 2, 0).detach().cpu().numpy()  # (H, W, C)
         x_np = (x_np - x_np.min()) / (x_np.max() - x_np.min() + 1e-8)  # normalize to [0, 1]
         
         segments = self._get_superpixels(x_np)

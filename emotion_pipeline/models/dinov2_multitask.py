@@ -3,7 +3,7 @@ import torch.nn as nn
 from .base import BaseModel
 
 class DinoV2EmotionVA(BaseModel):
-    def __init__(self, backbone_name: str = "dinov2_vitb14", use_cls_plus_patchmean: bool = True):
+    def __init__(self, backbone_name: str = "dinov2_vitb14", use_cls_plus_patchmean: bool = True, dropout: float = 0.4):
         super().__init__()
         self.backbone = torch.hub.load("facebookresearch/dinov2", backbone_name)
         self.use_cls_plus_patchmean = use_cls_plus_patchmean
@@ -11,8 +11,15 @@ class DinoV2EmotionVA(BaseModel):
         embed_dim = getattr(self.backbone, "embed_dim", 768)
         feat_dim = embed_dim * 2 if use_cls_plus_patchmean else embed_dim
 
-        self.emotion_head = nn.Linear(feat_dim, 6)
-        self.va_head = nn.Linear(feat_dim, 2)
+        # Add dropout to heads for regularization
+        self.emotion_head = nn.Sequential(
+            nn.Dropout(dropout),
+            nn.Linear(feat_dim, 6)
+        )
+        self.va_head = nn.Sequential(
+            nn.Dropout(dropout),
+            nn.Linear(feat_dim, 2)
+        )
 
     def forward(self, x):
         feats = self.backbone.forward_features(x)

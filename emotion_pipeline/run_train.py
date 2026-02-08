@@ -15,16 +15,20 @@ IMAGENET_STD  = (0.229, 0.224, 0.225)
 def make_transforms(image_size: int, train: bool):
     if train:
         return transforms.Compose([
-            transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0)),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(15),
+            transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)),  # More aggressive cropping
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(20),  # Increased from 10
+            transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.1),  # Stronger
+            transforms.RandomAffine(degrees=0, translate=(0.15, 0.15)),  # Translation
+            transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),    # NEW: blur
+            transforms.RandomPerspective(distortion_scale=0.2),          # NEW: perspective
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ])
+    # Test/val: NO augmentation, just resize and crop
     return transforms.Compose([
-        transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)),
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomRotation(15),
+        transforms.Resize(image_size + 32),
+        transforms.CenterCrop(image_size),
         transforms.ToTensor(),
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
@@ -44,7 +48,7 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers, pin_memory=True)
     test_loader  = DataLoader(test_ds,  batch_size=cfg.batch_size, shuffle=False, num_workers=cfg.num_workers, pin_memory=True)
 
-    model = DinoV2EmotionVA(backbone_name=cfg.backbone_name, use_cls_plus_patchmean=True)
+    model = DinoV2EmotionVA(backbone_name=cfg.backbone_name, use_cls_plus_patchmean=True, dropout=cfg.dropout)
 
     # Phase A: linear probe
     freeze_backbone(model, True)
@@ -53,9 +57,15 @@ def main():
         lr=cfg.lr_head, weight_decay=cfg.weight_decay
     )
     trainer = MultiTaskTrainer(model, train_loader, test_loader, cfg.device, cfg.lam_va)
-    trainer.fit(optimizer=optimizer, epochs=cfg.epochs_probe)
+    
+    # Add LR scheduler for phase A
+    scheduler_probe = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs_probe, eta_min=1e-5)
+    trainer.fit(optimizer=optimizer, epochs=cfg.epochs_probe, patience=cfg.early_stopping_patience, scheduler=scheduler_probe)
 
-    # Phase B: partial fine-tune (simple version: unfreeze all backbone)
+    # Phase B: conservative fine-tune (very small LR on backbone)
+    print("\n" + "="*80)
+    print("PHASE B: Fine-tuning with VERY low backbone LR to prevent overfitting")
+    print("="*80)
     freeze_backbone(model, False)
     optimizer = torch.optim.AdamW(
         [
@@ -65,10 +75,20 @@ def main():
         ],
         weight_decay=cfg.weight_decay
     )
-    trainer.fit(optimizer=optimizer, epochs=cfg.epochs_finetune)
+    
+    # Add LR scheduler for phase B with even lower eta_min
+    scheduler_finetune = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs_finetune, eta_min=1e-7)
+    trainer.fit(optimizer=optimizer, epochs=cfg.epochs_finetune, patience=cfg.early_stopping_patience, scheduler=scheduler_finetune)
 
+    # Load best checkpoint and save as final model
+    best_checkpoint = sorted(Path("checkpoints").glob("best_model_epoch*.pt"))[-1] if Path("checkpoints").glob("best_model_epoch*.pt") else None
+    if best_checkpoint:
+        print(f"\n✓ Loading best checkpoint: {best_checkpoint}")
+        model.load_state_dict(torch.load(best_checkpoint, map_location=cfg.device))
+        print(f"  Best validation accuracy: {trainer.state.best_val_acc*100:.2f}% (epoch {trainer.state.best_epoch})")
+    
     torch.save(model.state_dict(), "dinov2_emotion_va.pt")
-    print("Saved: dinov2_emotion_va.pt")
+    print("✓ Saved final model: dinov2_emotion_va.pt")
     
     # Save trainer state for later analysis
     trainer_state = {
@@ -76,6 +96,8 @@ def main():
         "val_losses": trainer.state.val_losses,
         "train_accs": trainer.state.train_accs,
         "val_accs": trainer.state.val_accs,
+        "best_epoch": trainer.state.best_epoch,
+        "best_val_acc": trainer.state.best_val_acc,
     }
     with open("trainer_state.pkl", "wb") as f:
         pickle.dump(trainer_state, f)

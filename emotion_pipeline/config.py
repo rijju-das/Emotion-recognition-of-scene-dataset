@@ -10,15 +10,18 @@ class Paths:
 
 @dataclass(frozen=True)
 class TrainConfig:
-    backbone_name: str = "dinov2_vitb14"  # try "dinov2_vits14" if needed
+    
+    backbone_name: str = "dinov2_vitl14"  # dinov2_vits14, dinov2_vitb14
     image_size: int = 224
-    batch_size: int = 32
+    batch_size: int = 16
     num_workers: int = 4
-    epochs_probe: int = 50
-    epochs_finetune: int = 150
-    lr_head: float = 1e-3
-    lr_backbone: float = 1e-5
-    weight_decay: float = 0.05
+    epochs_probe: int = 30
+    epochs_finetune: int = 40
+    lr_head: float = 5e-5
+    lr_backbone: float = 1e-6
+    weight_decay: float = 0.5
     lam_va: float = 2.0
+    dropout: float = 0.5
+    early_stopping_patience: int = 8
     seed: int = 42
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
