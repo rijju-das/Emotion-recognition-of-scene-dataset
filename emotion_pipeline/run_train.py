@@ -4,8 +4,8 @@ from torchvision import transforms
 import pickle
 from pathlib import Path
 
-from .config import Paths, TrainConfig
-from .data.emotion6 import Emotion6Dataset
+from .config import get_paths, TrainConfig, DATASET_NAME
+from .dataset_registry import get_dataset_info
 from .models.dinov2_multitask import DinoV2EmotionVA
 from .training.multitask_trainer import MultiTaskTrainer
 
@@ -18,10 +18,10 @@ def make_transforms(image_size: int, train: bool):
             transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)),  # More aggressive cropping
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomRotation(20),  # Increased from 10
-            transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.1),  # Stronger
+            # transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.1),  # Stronger
             transforms.RandomAffine(degrees=0, translate=(0.15, 0.15)),  # Translation
-            transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),    # NEW: blur
-            transforms.RandomPerspective(distortion_scale=0.2),          # NEW: perspective
+            # transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),    # NEW: blur
+            # transforms.RandomPerspective(distortion_scale=0.2),          # NEW: perspective
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ])
@@ -38,17 +38,23 @@ def freeze_backbone(model: DinoV2EmotionVA, freeze: bool):
         p.requires_grad = not freeze
 
 def main():
-    paths = Paths()
+    paths = get_paths()
     cfg = TrainConfig()
     torch.manual_seed(cfg.seed)
 
-    train_ds = Emotion6Dataset(str(paths.train_csv), str(paths.img_root), transform=make_transforms(cfg.image_size, True))
-    test_ds  = Emotion6Dataset(str(paths.test_csv),  str(paths.img_root), transform=make_transforms(cfg.image_size, False))
+    ds_info = get_dataset_info(DATASET_NAME)
+    train_ds = ds_info.dataset_cls(str(paths.train_csv), str(paths.img_root), transform=make_transforms(cfg.image_size, True))
+    test_ds  = ds_info.dataset_cls(str(paths.test_csv),  str(paths.img_root), transform=make_transforms(cfg.image_size, False))
 
     train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers, pin_memory=True)
     test_loader  = DataLoader(test_ds,  batch_size=cfg.batch_size, shuffle=False, num_workers=cfg.num_workers, pin_memory=True)
 
-    model = DinoV2EmotionVA(backbone_name=cfg.backbone_name, use_cls_plus_patchmean=True, dropout=cfg.dropout)
+    model = DinoV2EmotionVA(
+        backbone_name=cfg.backbone_name,
+        use_cls_plus_patchmean=True,
+        dropout=cfg.dropout,
+        num_emotions=cfg.num_emotions,
+    )
 
     # Phase A: linear probe
     freeze_backbone(model, True)
@@ -56,7 +62,15 @@ def main():
         list(model.emotion_head.parameters()) + list(model.va_head.parameters()),
         lr=cfg.lr_head, weight_decay=cfg.weight_decay
     )
-    trainer = MultiTaskTrainer(model, train_loader, test_loader, cfg.device, cfg.lam_va)
+    trainer = MultiTaskTrainer(
+        model,
+        train_loader,
+        test_loader,
+        cfg.device,
+        cfg.lam_va,
+        early_stop_lambda=cfg.early_stop_lambda,
+        checkpoint_dir="checkpoints/base",
+    )
     
     # Add LR scheduler for phase A
     scheduler_probe = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs_probe, eta_min=1e-5)
@@ -81,14 +95,18 @@ def main():
     trainer.fit(optimizer=optimizer, epochs=cfg.epochs_finetune, patience=cfg.early_stopping_patience, scheduler=scheduler_finetune)
 
     # Load best checkpoint and save as final model
-    best_checkpoint = sorted(Path("checkpoints").glob("best_model_epoch*.pt"))[-1] if Path("checkpoints").glob("best_model_epoch*.pt") else None
-    if best_checkpoint:
+    best_checkpoint = Path("checkpoints/base") / "best_model.pt"
+    if best_checkpoint.exists():
         print(f"\n✓ Loading best checkpoint: {best_checkpoint}")
         model.load_state_dict(torch.load(best_checkpoint, map_location=cfg.device))
-        print(f"  Best validation accuracy: {trainer.state.best_val_acc*100:.2f}% (epoch {trainer.state.best_epoch})")
+        print(
+            "  Best score: "
+            f"{trainer.state.best_score:.4f} (f1={trainer.state.best_val_f1:.4f}, rmse_va={trainer.state.best_val_rmse_va:.4f}, epoch {trainer.state.best_epoch})"
+        )
     
-    torch.save(model.state_dict(), "dinov2_emotion_va.pt")
-    print("✓ Saved final model: dinov2_emotion_va.pt")
+    final_model_path = Path("checkpoints/base") / "final_model.pt"
+    torch.save(model.state_dict(), final_model_path)
+    print(f"✓ Saved final model: {final_model_path}")
     
     # Save trainer state for later analysis
     trainer_state = {
@@ -98,10 +116,14 @@ def main():
         "val_accs": trainer.state.val_accs,
         "best_epoch": trainer.state.best_epoch,
         "best_val_acc": trainer.state.best_val_acc,
+        "best_val_f1": trainer.state.best_val_f1,
+        "best_val_rmse_va": trainer.state.best_val_rmse_va,
+        "best_score": trainer.state.best_score,
     }
-    with open("trainer_state.pkl", "wb") as f:
+    trainer_state_path = Path("checkpoints/base") / "trainer_state_base.pkl"
+    with open(trainer_state_path, "wb") as f:
         pickle.dump(trainer_state, f)
-    print("Saved: trainer_state.pkl (for loss curve plotting)")
+    print(f"Saved: {trainer_state_path} (for loss curve plotting)")
 
 if __name__ == "__main__":
     main()

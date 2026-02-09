@@ -8,16 +8,17 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
-from config import config
+from config import config, EMOTION_LABELS
+from dataset_registry import get_dataset_info
 from emotion_pipeline.models.dinov2_multitask import DinoV2EmotionVA
-from emotion_pipeline.data.emotion6 import Emotion6Dataset
 from emotion_pipeline.run_train import make_transforms
 from emotion_pipeline.training.multitask_trainer import MultiTaskTrainer
 from torch.utils.data import DataLoader
 
-EMOTION_LABELS = {0: "Anger", 1: "Disgust", 2: "Fear", 3: "Joy", 4: "Neutral", 5: "Sadness"}
-
-def load_and_analyze(checkpoint_path: str = "dinov2_emotion_va.pt", trainer_state_path: str = "trainer_state.pkl"):
+def load_and_analyze(
+    checkpoint_path: str = "checkpoints/attention/best_model.pt",
+    trainer_state_path: str = "checkpoints/attention/trainer_state.pkl",
+):
     """Load trained model and analyze on test set."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Device: {device}")
@@ -31,26 +32,31 @@ def load_and_analyze(checkpoint_path: str = "dinov2_emotion_va.pt", trainer_stat
         print(f"✓ Loaded trainer state from {trainer_state_path}")
     
     # Load model
-    model = DinoV2EmotionVA(backbone_name="dinov2_vitb14", use_cls_plus_patchmean=True)
+    model = DinoV2EmotionVA(
+        backbone_name=config.backbone_name,
+        use_cls_plus_patchmean=True,
+        num_emotions=config.num_emotions,
+    )
     ckpt = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(ckpt)
     model = model.to(device)
     print(f"✓ Loaded model from {checkpoint_path}")
     
     # Load test dataset
-    test_ds = Emotion6Dataset(
+    ds_info = get_dataset_info(getattr(config, "DATASET_NAME", "emotion6"))
+    test_ds = ds_info.dataset_cls(
         str(config.test_csv), 
         str(config.img_root), 
-        transform=make_transforms(224, train=False)
+        transform=make_transforms(config.image_size, train=False)
     )
     test_loader = DataLoader(test_ds, batch_size=32, shuffle=False, num_workers=4, pin_memory=True)
     print(f"✓ Loaded {len(test_ds)} test samples")
     
     # Create trainer
-    train_ds = Emotion6Dataset(
+    train_ds = ds_info.dataset_cls(
         str(config.train_csv),
         str(config.img_root),
-        transform=make_transforms(224, train=True)
+        transform=make_transforms(config.image_size, train=True)
     )
     train_loader = DataLoader(train_ds, batch_size=32, shuffle=True, num_workers=4, pin_memory=True)
     trainer = MultiTaskTrainer(model, train_loader, test_loader, device, lam_va=1.0)

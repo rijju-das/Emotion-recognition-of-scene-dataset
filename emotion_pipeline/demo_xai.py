@@ -2,16 +2,26 @@ import torch
 from torchvision import transforms
 from PIL import Image
 import matplotlib.pyplot as plt
+from pathlib import Path
 
-from .config import Paths, TrainConfig
-from emotion_pipeline.models.dinov2_multitask import DinoV2EmotionVA
+from .config import Paths
+from .attention_config import AttentionModelConfig
+from emotion_pipeline.models.dinov2_multitask_extended import create_model
 from emotion_pipeline.xai.ig_explainer import IntegratedGradientsExplainer
 from emotion_pipeline.xai.gradient_input_explainer import GradientInputExplainer
 from emotion_pipeline.xai.gradcam_explainer import GradCAMExplainer
 from emotion_pipeline.xai.shap_explainer import SHAPSuperpixelExplainer
 
-def load_model(checkpoint_path: str, device: str):
-    model = DinoV2EmotionVA(backbone_name="dinov2_vitb14", use_cls_plus_patchmean=True)
+def load_model(checkpoint_path: str, device: str, cfg: AttentionModelConfig):
+    model = create_model(
+        model_type=cfg.model_type,
+        backbone_name=cfg.backbone_name,
+        dropout=cfg.dropout,
+        use_cls_plus_patchmean=True,
+        num_queries=cfg.num_queries,
+        num_heads=cfg.num_attention_heads,
+        num_emotions=cfg.num_emotions,
+    )
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))
     model = model.to(device)
     model.eval()
@@ -28,7 +38,13 @@ def load_and_preprocess_image(img_path: str, image_size: int = 224):
     x = transform(img).unsqueeze(0)
     return x
 
-def visualize_attribution(x: torch.Tensor, attribution: torch.Tensor, title: str):
+def visualize_attribution(
+    x: torch.Tensor,
+    attribution: torch.Tensor,
+    title: str,
+    output_dir: Path,
+    overlay: bool = False,
+):
     """Visualize input image and attribution heatmap."""
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     
@@ -48,23 +64,33 @@ def visualize_attribution(x: torch.Tensor, attribution: torch.Tensor, title: str
     else:
         if attribution.dim() == 4:
             attr_vis = attribution.mean(dim=1)[0].detach().cpu().numpy()
+        elif attribution.dim() == 3:
+            attr_vis = attribution[0].detach().cpu().numpy()
         else:
             attr_vis = attribution.detach().cpu().numpy()
-        axes[1].imshow(attr_vis, cmap="RdBu_r")
+
+        if overlay:
+            axes[1].imshow(x_vis)
+            axes[1].imshow(attr_vis, cmap="jet", alpha=0.5)
+        else:
+            axes[1].imshow(attr_vis, cmap="RdBu_r")
     axes[1].set_title(title)
     axes[1].axis("off")
     
     plt.tight_layout()
-    plt.savefig(f"xai_{title}.png", dpi=150, bbox_inches="tight")
-    print(f"Saved: xai_{title}.png")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"xai_{title}.png"
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    print(f"Saved: {output_path}")
 
 def main():
     paths = Paths()
-    cfg = TrainConfig()
+    cfg = AttentionModelConfig()
     device = cfg.device
-    model = load_model("dinov2_emotion_va.pt", device=device)
-    x = load_and_preprocess_image(paths.img_root / "joy/1.jpg")
+    model = load_model("checkpoints/attention/best_model.pt", device=device, cfg=cfg)
+    x = load_and_preprocess_image(paths.img_root / "joy/2.jpg", image_size=cfg.image_size)
     x = x.to(device)
+    output_dir = Path("outputs") / "xai"
     
     # Get prediction
     with torch.no_grad():
@@ -75,17 +101,17 @@ def main():
     print("\n=== Integrated Gradients ===")
     ig_explainer = IntegratedGradientsExplainer(model, head="emotion")
     ig_attr = ig_explainer.explain(x, target=pred_class)
-    visualize_attribution(x, ig_attr, "IntegratedGradients")
+    visualize_attribution(x, ig_attr, "IntegratedGradients", output_dir)
     
     print("\n=== Gradient × Input ===")
     gi_explainer = GradientInputExplainer(model, head="emotion")
     gi_attr = gi_explainer.explain(x, target=pred_class)
-    visualize_attribution(x, gi_attr, "Gradient_Input")
+    visualize_attribution(x, gi_attr, "Gradient_Input", output_dir)
     
     print("\n=== Grad-CAM ===")
     gradcam_explainer = GradCAMExplainer(model, head="emotion")
     cam = gradcam_explainer.explain(x, target=pred_class)
-    visualize_attribution(x, cam, "GradCAM")
+    visualize_attribution(x, cam, "GradCAM", output_dir, overlay=True)
     
     print("\n=== SHAP Superpixels ===")
     shap_explainer = SHAPSuperpixelExplainer(model, head="emotion", n_superpixels=50)

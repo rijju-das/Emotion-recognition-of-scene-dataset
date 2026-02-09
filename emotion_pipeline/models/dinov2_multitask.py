@@ -3,7 +3,17 @@ import torch.nn as nn
 from .base import BaseModel
 
 class DinoV2EmotionVA(BaseModel):
-    def __init__(self, backbone_name: str = "dinov2_vitb14", use_cls_plus_patchmean: bool = True, dropout: float = 0.4):
+    """
+    Baseline model: DINOv2 backbone + simple CLS + patch mean pooling.
+    Use extended classes for novel attention pooling mechanisms.
+    """
+    def __init__(
+        self,
+        backbone_name: str = "dinov2_vitb14",
+        use_cls_plus_patchmean: bool = True,
+        dropout: float = 0.4,
+        num_emotions: int = 6,
+    ):
         super().__init__()
         self.backbone = torch.hub.load("facebookresearch/dinov2", backbone_name)
         self.use_cls_plus_patchmean = use_cls_plus_patchmean
@@ -14,7 +24,7 @@ class DinoV2EmotionVA(BaseModel):
         # Add dropout to heads for regularization
         self.emotion_head = nn.Sequential(
             nn.Dropout(dropout),
-            nn.Linear(feat_dim, 6)
+            nn.Linear(feat_dim, num_emotions)
         )
         self.va_head = nn.Sequential(
             nn.Dropout(dropout),

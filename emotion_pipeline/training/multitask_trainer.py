@@ -10,6 +10,9 @@ from ..eval.metrics import Metrics
 class TrainerState:
     best_val_loss: float = 1e18
     best_val_acc: float = 0.0
+    best_val_f1: float = 0.0
+    best_val_rmse_va: float = 1e18
+    best_score: float = -1e18
     train_losses: list = field(default_factory=list)
     val_losses: list = field(default_factory=list)
     train_accs: list = field(default_factory=list)
@@ -17,13 +20,29 @@ class TrainerState:
     best_epoch: int = 0
 
 class MultiTaskTrainer(BaseTrainer):
-    def __init__(self, model, train_loader: DataLoader, test_loader: DataLoader, device: str, lam_va: float, checkpoint_dir: str = "checkpoints"):
+    def __init__(
+        self,
+        model,
+        train_loader: DataLoader,
+        test_loader: DataLoader,
+        device: str,
+        lam_va: float,
+        early_stop_lambda: float = 0.3,
+        checkpoint_dir: str = "checkpoints",
+    ):
         self.model = model.to(device)
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.device = device
         self.lam_va = lam_va
+        self.early_stop_lambda = early_stop_lambda
         self.state = TrainerState()
+        self.num_classes = 6
+        if hasattr(train_loader.dataset, "num_classes"):
+            try:
+                self.num_classes = int(train_loader.dataset.num_classes())
+            except Exception:
+                self.num_classes = 6
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
         if self.checkpoint_dir is not None:
             self.checkpoint_dir.mkdir(exist_ok=True)
@@ -50,13 +69,16 @@ class MultiTaskTrainer(BaseTrainer):
 
         return loss.item(), logits.detach(), va_pred.detach(), y.detach(), va.detach()
 
-    def fit(self, optimizer, epochs: int, num_classes: int = 6, patience: int = 20, scheduler=None):
+    def fit(self, optimizer, epochs: int, num_classes: int | None = None, patience: int = 20, scheduler=None):
         print(f"\n{'='*80}")
         print(f"Training for {epochs} epochs | device={self.device} | early_stopping_patience={patience} | scheduler={'CosineAnnealingLR' if scheduler else 'None'}")
         print(f"{'='*80}\n")
         
         no_improve_count = 0
         
+        if num_classes is None:
+            num_classes = self.num_classes
+
         for ep in range(1, epochs + 1):
             # Training phase: compute loss and train accuracy
             total_train_loss = 0.0
@@ -78,10 +100,15 @@ class MultiTaskTrainer(BaseTrainer):
             # Validation phase
             val = self.evaluate(num_classes=num_classes)
             
+            val_score = val['f1'] - self.early_stop_lambda * val['rmse_va']
+
             # Track best model and early stopping
-            if val['loss'] < self.state.best_val_loss:
+            if val_score > self.state.best_score:
+                self.state.best_score = val_score
                 self.state.best_val_loss = val['loss']
                 self.state.best_val_acc = val['acc']
+                self.state.best_val_f1 = val['f1']
+                self.state.best_val_rmse_va = val['rmse_va']
                 self.state.best_epoch = ep
                 no_improve_count = 0
                 best_marker = " ⭐ (best)"
@@ -102,12 +129,12 @@ class MultiTaskTrainer(BaseTrainer):
             
             # Detailed logging
             print(f"Epoch {ep:3d}/{epochs} | "
-                  f"Train: loss={train_loss_avg:.4f} acc={train_acc:.4f} f1={train_f1:.4f} | "
-                  f"Val: loss={val['loss']:.4f} acc={val['acc']:.4f} f1={val['f1']:.4f} rmse_va={val['rmse_va']:.4f}{best_marker}")
+                f"Train: loss={train_loss_avg:.4f} acc={train_acc:.4f} f1={train_f1:.4f} | "
+                f"Val: loss={val['loss']:.4f} acc={val['acc']:.4f} f1={val['f1']:.4f} rmse_va={val['rmse_va']:.4f} score={val_score:.4f}{best_marker}")
             
             # Early stopping
             if no_improve_count >= patience:
-                print(f"\n⭐ Early stopping at epoch {ep} (val loss didn't improve for {patience} epochs)")
+                print(f"\n⭐ Early stopping at epoch {ep} (score didn't improve for {patience} epochs)")
                 break
             
             # Learning rate scheduling
@@ -115,14 +142,19 @@ class MultiTaskTrainer(BaseTrainer):
                 scheduler.step()
         
         print(f"\n{'='*80}")
-        print(f"Training complete. Best val_loss: {self.state.best_val_loss:.4f}")
+        print(
+            "Training complete. Best score: "
+            f"{self.state.best_score:.4f} (f1={self.state.best_val_f1:.4f}, rmse_va={self.state.best_val_rmse_va:.4f})"
+        )
         print(f"{'='*80}\n")
 
         if self.checkpoint_dir is not None:
             final_checkpoint = self.checkpoint_dir / "final_model.pt"
             torch.save(self.model.state_dict(), final_checkpoint)
 
-    def evaluate(self, num_classes: int = 6):
+    def evaluate(self, num_classes: int | None = None):
+        if num_classes is None:
+            num_classes = self.num_classes
         total_loss = 0.0
         all_logits, all_y = [], []
         all_va_pred, all_va_true = [], []
