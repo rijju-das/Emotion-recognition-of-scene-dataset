@@ -9,12 +9,17 @@ class DinoV2EmotionVA(BaseModel):
     """
     def __init__(
         self,
-        backbone_name: str = "dinov2_vitb14",
+        backbone_name: str | None = None,
         use_cls_plus_patchmean: bool = True,
         dropout: float = 0.4,
-        num_emotions: int = 6,
+        num_emotions: int | None = None,
+        va_dims: int | None = None,
     ):
         super().__init__()
+        if backbone_name is None:
+            backbone_name = "dinov2_vitb14"
+        if num_emotions is None:
+            num_emotions = 6
         self.backbone = torch.hub.load("facebookresearch/dinov2", backbone_name)
         self.use_cls_plus_patchmean = use_cls_plus_patchmean
 
@@ -26,9 +31,11 @@ class DinoV2EmotionVA(BaseModel):
             nn.Dropout(dropout),
             nn.Linear(feat_dim, num_emotions)
         )
+        if va_dims is None:
+            va_dims = 2
         self.va_head = nn.Sequential(
             nn.Dropout(dropout),
-            nn.Linear(feat_dim, 2)
+            nn.Linear(feat_dim, va_dims)
         )
 
     def forward(self, x):

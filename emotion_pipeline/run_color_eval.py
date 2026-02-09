@@ -42,6 +42,7 @@ def main():
         num_queries=cfg.num_queries,
         num_heads=cfg.num_attention_heads,
         num_emotions=cfg.num_emotions,
+        va_dims=cfg.va_dims,
     )
     model.load_state_dict(torch.load(get_checkpoint_dir("attention") / "final_model.pt", map_location=cfg.device))
     model = model.to(cfg.device)

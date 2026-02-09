@@ -21,6 +21,7 @@ def load_model(checkpoint_path: str, device: str, cfg: AttentionModelConfig):
         num_queries=cfg.num_queries,
         num_heads=cfg.num_attention_heads,
         num_emotions=cfg.num_emotions,
+        va_dims=cfg.va_dims,
     )
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))
     model = model.to(device)

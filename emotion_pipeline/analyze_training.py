@@ -40,6 +40,7 @@ def load_and_analyze(
         backbone_name=config.backbone_name,
         use_cls_plus_patchmean=True,
         num_emotions=config.num_emotions,
+        va_dims=config.va_dims,
     )
     ckpt = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(ckpt)

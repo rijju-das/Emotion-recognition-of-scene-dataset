@@ -62,15 +62,16 @@ class TrainConfig:
 
     backbone_name: str = "dinov2_vitb14" #"dinov2_vitl14", dinov2_vits14, dinov2_vitb14
     image_size: int = 224
-    batch_size: int = 16
+    batch_size: int = 32
     num_workers: int = 4
     epochs_probe: int = 200  # Increased: still improving at epoch 60
     epochs_finetune: int = 40
-    lr_head: float = 5e-5
-    lr_backbone: float = 1e-6
-    weight_decay: float = 0.3 #0.5
-    lam_va: float = 2.0
-    dropout: float = 0.6  #0.5
+    lr_head: float = 1e-4 if DATASET_NAME == "dvisa" else 5e-5
+    lr_backbone: float = 5e-6 if DATASET_NAME == "dvisa" else 1e-6
+    weight_decay: float = 0.1 if DATASET_NAME == "dvisa" else 0.3
+    lam_va: float = 0.8 if DATASET_NAME == "dvisa" else 2.0
+    dropout: float = 0.4 if DATASET_NAME == "dvisa" else 0.6
+    va_dims: int = 3 if DATASET_NAME == "dvisa" else 2
     # Classifier head options
     num_emotions: int = len(EMOTION_LABELS)
     head_type: str = "linear"  # linear | mlp
