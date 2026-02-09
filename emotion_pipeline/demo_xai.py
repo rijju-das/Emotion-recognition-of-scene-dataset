@@ -4,7 +4,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from .config import Paths
+from .config import Paths, get_checkpoint_dir, get_output_dir
 from .attention_config import AttentionModelConfig
 from emotion_pipeline.models.dinov2_multitask_extended import create_model
 from emotion_pipeline.xai.ig_explainer import IntegratedGradientsExplainer
@@ -87,10 +87,10 @@ def main():
     paths = Paths()
     cfg = AttentionModelConfig()
     device = cfg.device
-    model = load_model("checkpoints/attention/best_model.pt", device=device, cfg=cfg)
+    model = load_model(str(get_checkpoint_dir("attention") / "best_model.pt"), device=device, cfg=cfg)
     x = load_and_preprocess_image(paths.img_root / "joy/2.jpg", image_size=cfg.image_size)
     x = x.to(device)
-    output_dir = Path("outputs") / "xai"
+    output_dir = get_output_dir("xai")
     
     # Get prediction
     with torch.no_grad():

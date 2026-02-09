@@ -4,7 +4,7 @@ from torchvision import transforms
 import pickle
 from pathlib import Path
 
-from .config import get_paths, TrainConfig, DATASET_NAME
+from .config import get_paths, get_checkpoint_dir, TrainConfig, DATASET_NAME
 from .dataset_registry import get_dataset_info
 from .models.dinov2_multitask import DinoV2EmotionVA
 from .training.multitask_trainer import MultiTaskTrainer
@@ -62,6 +62,7 @@ def main():
         list(model.emotion_head.parameters()) + list(model.va_head.parameters()),
         lr=cfg.lr_head, weight_decay=cfg.weight_decay
     )
+    checkpoint_dir = get_checkpoint_dir("base")
     trainer = MultiTaskTrainer(
         model,
         train_loader,
@@ -69,7 +70,7 @@ def main():
         cfg.device,
         cfg.lam_va,
         early_stop_lambda=cfg.early_stop_lambda,
-        checkpoint_dir="checkpoints/base",
+        checkpoint_dir=str(checkpoint_dir),
     )
     
     # Add LR scheduler for phase A
@@ -95,7 +96,7 @@ def main():
     trainer.fit(optimizer=optimizer, epochs=cfg.epochs_finetune, patience=cfg.early_stopping_patience, scheduler=scheduler_finetune)
 
     # Load best checkpoint and save as final model
-    best_checkpoint = Path("checkpoints/base") / "best_model.pt"
+    best_checkpoint = checkpoint_dir / "best_model.pt"
     if best_checkpoint.exists():
         print(f"\n✓ Loading best checkpoint: {best_checkpoint}")
         model.load_state_dict(torch.load(best_checkpoint, map_location=cfg.device))
@@ -104,7 +105,7 @@ def main():
             f"{trainer.state.best_score:.4f} (f1={trainer.state.best_val_f1:.4f}, rmse_va={trainer.state.best_val_rmse_va:.4f}, epoch {trainer.state.best_epoch})"
         )
     
-    final_model_path = Path("checkpoints/base") / "final_model.pt"
+    final_model_path = checkpoint_dir / "final_model.pt"
     torch.save(model.state_dict(), final_model_path)
     print(f"✓ Saved final model: {final_model_path}")
     
@@ -120,7 +121,7 @@ def main():
         "best_val_rmse_va": trainer.state.best_val_rmse_va,
         "best_score": trainer.state.best_score,
     }
-    trainer_state_path = Path("checkpoints/base") / "trainer_state_base.pkl"
+    trainer_state_path = checkpoint_dir / "trainer_state_base.pkl"
     with open(trainer_state_path, "wb") as f:
         pickle.dump(trainer_state, f)
     print(f"Saved: {trainer_state_path} (for loss curve plotting)")

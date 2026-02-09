@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
-from config import config, EMOTION_LABELS
+from config import config, EMOTION_LABELS, get_checkpoint_dir
 from dataset_registry import get_dataset_info
 from emotion_pipeline.models.dinov2_multitask import DinoV2EmotionVA
 from emotion_pipeline.run_train import make_transforms
@@ -16,10 +16,14 @@ from emotion_pipeline.training.multitask_trainer import MultiTaskTrainer
 from torch.utils.data import DataLoader
 
 def load_and_analyze(
-    checkpoint_path: str = "checkpoints/attention/best_model.pt",
-    trainer_state_path: str = "checkpoints/attention/trainer_state.pkl",
+    checkpoint_path: str | None = None,
+    trainer_state_path: str | None = None,
 ):
     """Load trained model and analyze on test set."""
+    if checkpoint_path is None:
+        checkpoint_path = str(get_checkpoint_dir("attention") / "best_model.pt")
+    if trainer_state_path is None:
+        trainer_state_path = str(get_checkpoint_dir("attention") / "trainer_state_attention.pkl")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Device: {device}")
     

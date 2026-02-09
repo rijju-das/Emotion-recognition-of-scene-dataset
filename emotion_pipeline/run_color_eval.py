@@ -5,7 +5,7 @@ from pathlib import Path
 import csv
 import matplotlib.pyplot as plt
 
-from .config import get_paths, DATASET_NAME
+from .config import get_paths, get_checkpoint_dir, get_output_dir, DATASET_NAME
 from .attention_config import AttentionModelConfig
 from .dataset_registry import get_dataset_info
 from .models.dinov2_multitask_extended import create_model
@@ -31,7 +31,7 @@ def main():
     paths = get_paths()
     cfg = AttentionModelConfig()
     ds_info = get_dataset_info(DATASET_NAME)
-    output_dir = Path("outputs") / "color_eval"
+    output_dir = get_output_dir("color_eval")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     model = create_model(
@@ -43,7 +43,7 @@ def main():
         num_heads=cfg.num_attention_heads,
         num_emotions=cfg.num_emotions,
     )
-    model.load_state_dict(torch.load("checkpoints/attention/final_model.pt", map_location=cfg.device))
+    model.load_state_dict(torch.load(get_checkpoint_dir("attention") / "final_model.pt", map_location=cfg.device))
     model = model.to(cfg.device)
     model.eval()
 
