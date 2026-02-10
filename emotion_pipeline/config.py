@@ -23,7 +23,7 @@ EMOTION_LABELS_DVISA = {
 }
 
 # Switch between datasets: "emotion6" or "dvisa"
-DATASET_NAME = "dvisa"
+DATASET_NAME = "emotion6"
 EMOTION_LABEL_SET = DATASET_NAME
 EMOTION_LABELS = EMOTION_LABELS_EMOTION6 if EMOTION_LABEL_SET == "emotion6" else EMOTION_LABELS_DVISA
 
@@ -51,11 +51,24 @@ OUTPUT_ROOT = Path("outputs") / DATASET_NAME
 
 
 def get_checkpoint_dir(run_name: str) -> Path:
+    """Get checkpoint directory for a specific run (no auto-creation)."""
     return CHECKPOINT_ROOT / run_name
 
 
-def get_output_dir(name: str) -> Path:
-    return OUTPUT_ROOT / name
+def get_output_dir(category: str) -> Path:
+    """Get output directory for a specific category (returns path, caller must create)."""
+    return OUTPUT_ROOT / category
+
+
+# Predefined output categories
+OUTPUT_CATEGORIES = {
+    "xai": "Explainability outputs (Grad-CAM, Integrated Gradients, SHAP, etc.)",
+    "attention": "Attention pooling visualizations",
+    "visualizations": "Model visualizations and plots",
+    "attention_maps": "Raw attention module outputs",
+    "metrics": "Evaluation metrics and results",
+    "logs": "Training logs and outputs",
+}
 
 @dataclass(frozen=True)
 class TrainConfig:

@@ -4,13 +4,16 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from .config import Paths, get_checkpoint_dir, get_output_dir
+from .config import get_paths, get_checkpoint_dir, get_output_dir
 from .attention_config import AttentionModelConfig
 from emotion_pipeline.models.dinov2_multitask_extended import create_model
 from emotion_pipeline.xai.ig_explainer import IntegratedGradientsExplainer
 from emotion_pipeline.xai.gradient_input_explainer import GradientInputExplainer
 from emotion_pipeline.xai.gradcam_explainer import GradCAMExplainer
+from emotion_pipeline.xai.token_gradcam_explainer import TokenGradCAMExplainer
 from emotion_pipeline.xai.shap_explainer import SHAPSuperpixelExplainer
+from emotion_pipeline.xai.attention_rollout_explainer import AttentionRolloutExplainer
+
 
 def load_model(checkpoint_path: str, device: str, cfg: AttentionModelConfig):
     model = create_model(
@@ -85,13 +88,13 @@ def visualize_attribution(
     print(f"Saved: {output_path}")
 
 def main():
-    paths = Paths()
+    paths = get_paths()
     cfg = AttentionModelConfig()
     device = cfg.device
     model = load_model(str(get_checkpoint_dir("attention") / "best_model.pt"), device=device, cfg=cfg)
     x = load_and_preprocess_image(paths.img_root / "joy/2.jpg", image_size=cfg.image_size)
     x = x.to(device)
-    output_dir = get_output_dir("xai")
+    output_dir = get_output_dir("attention/xai")
     
     # Get prediction
     with torch.no_grad():
@@ -113,12 +116,22 @@ def main():
     gradcam_explainer = GradCAMExplainer(model, head="emotion")
     cam = gradcam_explainer.explain(x, target=pred_class)
     visualize_attribution(x, cam, "GradCAM", output_dir, overlay=True)
+
+    print("\n=== Token Grad-CAM ===")
+    token_cam_explainer = TokenGradCAMExplainer(model, keep_ratio=0.10, mode="weighted", smooth=True)
+    token_cam = token_cam_explainer.explain(x, target=pred_class)
+    visualize_attribution(x, token_cam, "TokenGradCAM_TopK", output_dir, overlay=True)
     
     print("\n=== SHAP Superpixels ===")
     shap_explainer = SHAPSuperpixelExplainer(model, head="emotion", n_superpixels=50)
     shap_result = shap_explainer.explain(x, target=pred_class, n_samples=50)
     print(f"SHAP result keys: {shap_result.keys()}")
     print(f"Superpixel attributions shape: {shap_result['attributions'].shape}")
+
+    print("\n=== Attention Rollout (ViT-native) ===")
+    rollout_explainer = AttentionRolloutExplainer(model, discard_ratio=0.0)
+    rollout_attr = rollout_explainer.explain(x)
+    visualize_attribution(x, rollout_attr, "AttentionRollout", output_dir, overlay=True)
 
 if __name__ == "__main__":
     main()
