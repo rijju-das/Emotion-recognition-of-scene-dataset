@@ -22,16 +22,38 @@ EMOTION_LABELS_DVISA = {
     7: "Contentment",
 }
 
-# Switch between datasets: "emotion6" or "dvisa"
-DATASET_NAME = "emotion6"
+EMOTION_LABELS_EMOSET_NEW = {
+    0: "Amusement",
+    1: "Anger",
+    2: "Contentment",
+    3: "Disgust",
+    4: "Excitement",
+    5: "Fear",
+    6: "Sadness",
+    7: "Awe",
+}
+
+# Switch between datasets: "emotion6", "dvisa", or "emoset_new"
+DATASET_NAME = "emoset_new"
+
+# Training variant: "base", "extended", or "attention"
+TRAIN_VARIANT = "extended"
+
+# Task mode: "auto", "multitask", or "emotion_only"
+TASK_MODE = "auto"
 EMOTION_LABEL_SET = DATASET_NAME
-EMOTION_LABELS = EMOTION_LABELS_EMOTION6 if EMOTION_LABEL_SET == "emotion6" else EMOTION_LABELS_DVISA
+if EMOTION_LABEL_SET == "emotion6":
+    EMOTION_LABELS = EMOTION_LABELS_EMOTION6
+elif EMOTION_LABEL_SET == "dvisa":
+    EMOTION_LABELS = EMOTION_LABELS_DVISA
+else:
+    EMOTION_LABELS = EMOTION_LABELS_EMOSET_NEW
 
 @dataclass(frozen=True)
 class PathsEmotion6:
     img_root: Path = Path("/home/rdas/color_transfer/Emotion6_new")  # e.g., Emotion6/disgust/1.jpg
-    train_csv: Path = Path("emotion6_train_80.csv")
-    test_csv: Path = Path("emotion6_test_20.csv")
+    train_csv: Path = Path("/home/rdas/color_transfer/Emotion6_new/emotion6_train_80.csv")
+    test_csv: Path = Path("/home/rdas/color_transfer/Emotion6_new/emotion6_test_20.csv")
 
 
 class PathsDVisa:
@@ -40,10 +62,32 @@ class PathsDVisa:
     test_csv: Path = Path("/home/rdas/color_transfer/D-Visa/D-ViSA_test_20.csv")
 
 
+class PathsEmoSetNew:
+    img_root: Path = Path("/home/rdas/color_transfer/emoset_new")
+    train_csv: Path = Path("/home/rdas/color_transfer/emoset_new/emoset_train_60.csv")
+    test_csv: Path = Path("/home/rdas/color_transfer/emoset_new/emoset_val_20.csv")  # Using val set for testing in this example
+
+
 def get_paths():
     if DATASET_NAME == "dvisa":
         return PathsDVisa()
+    if DATASET_NAME == "emoset_new":
+        return PathsEmoSetNew()
     return PathsEmotion6()
+
+
+def get_task_mode() -> str:
+    if TASK_MODE == "auto":
+        return "emotion_only" if DATASET_NAME == "emoset_new" else "multitask"
+    if TASK_MODE not in {"multitask", "emotion_only"}:
+        raise ValueError("TASK_MODE must be 'auto', 'multitask', or 'emotion_only'")
+    return TASK_MODE
+
+
+def get_train_variant() -> str:
+    if TRAIN_VARIANT not in {"base", "extended", "attention"}:
+        raise ValueError("TRAIN_VARIANT must be 'base', 'extended', or 'attention'")
+    return TRAIN_VARIANT
 
 
 CHECKPOINT_ROOT = Path("checkpoints") / DATASET_NAME
@@ -75,10 +119,10 @@ class TrainConfig:
 
     backbone_name: str = "dinov2_vitb14" #"dinov2_vitl14", dinov2_vits14, dinov2_vitb14
     image_size: int = 224
-    batch_size: int = 32
-    num_workers: int = 4
-    epochs_probe: int = 200  # Increased: still improving at epoch 60
-    epochs_finetune: int = 40
+    batch_size: int = 64  #32
+    num_workers: int = 2  #4
+    epochs_probe: int = 100  # 200 Reduced for faster training
+    epochs_finetune: int = 20 #40 Reduced for faster training
     lr_head: float = 1e-4 if DATASET_NAME == "dvisa" else 5e-5
     lr_backbone: float = 5e-6 if DATASET_NAME == "dvisa" else 1e-6
     weight_decay: float = 0.1 if DATASET_NAME == "dvisa" else 0.3

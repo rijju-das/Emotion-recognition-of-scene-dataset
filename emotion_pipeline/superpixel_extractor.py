@@ -40,15 +40,18 @@ class SuperpixelPaletteExtractor:
         sp_labels = np.unique(segments)
         feats = np.vstack([image_lab[segments == sp].mean(axis=0) for sp in sp_labels])
 
-        k = min(self.n_clusters, len(sp_labels))
-        clustering = AgglomerativeClustering(n_clusters=k, linkage="average")
-        sp_cluster = clustering.fit_predict(feats)
+        if len(sp_labels) < 2:
+            merged_segments = segments
+        else:
+            k = min(self.n_clusters, len(sp_labels))
+            clustering = AgglomerativeClustering(n_clusters=k, linkage="average")
+            sp_cluster = clustering.fit_predict(feats)
 
-        sp2cl = np.zeros(int(sp_labels.max()) + 1, dtype=np.int32)
-        for sp, cl in zip(sp_labels, sp_cluster):
-            sp2cl[int(sp)] = int(cl)
+            sp2cl = np.zeros(int(sp_labels.max()) + 1, dtype=np.int32)
+            for sp, cl in zip(sp_labels, sp_cluster):
+                sp2cl[int(sp)] = int(cl)
 
-        merged_segments = sp2cl[segments]
+            merged_segments = sp2cl[segments]
 
         final_labels = np.unique(merged_segments)
         h, w = merged_segments.shape

@@ -3,6 +3,7 @@ from typing import Type
 
 from .data.emotion6 import Emotion6Dataset, EMOTIONS
 from .data.dvisa import DVisaDataset, DVISA_EMOTIONS
+from .data.emoset_new import EmoSetNewDataset, EMOSET_NEW_EMOTIONS
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,11 @@ _DATASETS = {
         name="dvisa",
         dataset_cls=DVisaDataset,
         class_names=DVISA_EMOTIONS,
+    ),
+    "emoset_new": DatasetInfo(
+        name="emoset_new",
+        dataset_cls=EmoSetNewDataset,
+        class_names=EMOSET_NEW_EMOTIONS,
     ),
 }
 
