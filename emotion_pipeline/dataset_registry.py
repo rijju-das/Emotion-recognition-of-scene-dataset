@@ -19,6 +19,11 @@ _DATASETS = {
         dataset_cls=Emotion6Dataset,
         class_names=EMOTIONS,
     ),
+    "emotion_ori": DatasetInfo(
+        name="emotion_ori",
+        dataset_cls=Emotion6Dataset,
+        class_names=EMOTIONS,
+    ),
     "dvisa": DatasetInfo(
         name="dvisa",
         dataset_cls=DVisaDataset,

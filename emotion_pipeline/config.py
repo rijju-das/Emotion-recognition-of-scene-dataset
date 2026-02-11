@@ -11,6 +11,15 @@ EMOTION_LABELS_EMOTION6 = {
     5: "Sadness",
 }
 
+EMOTION_LABELS_EMOTION_ORI = {
+    0: "Anger",
+    1: "Disgust",
+    2: "Fear",
+    3: "Joy",
+    4: "Sadness",
+    5: "Surprise",
+}
+
 EMOTION_LABELS_DVISA = {
     0: "Anger",
     1: "Disgust",
@@ -33,7 +42,7 @@ EMOTION_LABELS_EMOSET_NEW = {
     7: "Awe",
 }
 
-# Switch between datasets: "emotion6", "dvisa", or "emoset_new"
+# Switch between datasets: "emotion6", "emotion_ori", "dvisa", or "emoset_new"
 DATASET_NAME = "emoset_new"
 
 # Training variant: "base", "extended", or "attention"
@@ -44,6 +53,8 @@ TASK_MODE = "auto"
 EMOTION_LABEL_SET = DATASET_NAME
 if EMOTION_LABEL_SET == "emotion6":
     EMOTION_LABELS = EMOTION_LABELS_EMOTION6
+elif EMOTION_LABEL_SET == "emotion_ori":
+    EMOTION_LABELS = EMOTION_LABELS_EMOTION_ORI
 elif EMOTION_LABEL_SET == "dvisa":
     EMOTION_LABELS = EMOTION_LABELS_DVISA
 else:
@@ -54,6 +65,12 @@ class PathsEmotion6:
     img_root: Path = Path("/home/rdas/color_transfer/Emotion6_new")  # e.g., Emotion6/disgust/1.jpg
     train_csv: Path = Path("/home/rdas/color_transfer/Emotion6_new/emotion6_train_80.csv")
     test_csv: Path = Path("/home/rdas/color_transfer/Emotion6_new/emotion6_test_20.csv")
+
+
+class PathsEmotionOri:
+    img_root: Path = Path("/home/rdas/color_transfer/Emotion6")  # e.g., Emotion6/disgust/1.jpg
+    train_csv: Path = Path("/home/rdas/color_transfer/Emotion6/emotion6_ori_train_80.csv")
+    test_csv: Path = Path("/home/rdas/color_transfer/Emotion6/emotion6_ori_test_20.csv")
 
 
 class PathsDVisa:
@@ -73,6 +90,8 @@ def get_paths():
         return PathsDVisa()
     if DATASET_NAME == "emoset_new":
         return PathsEmoSetNew()
+    if DATASET_NAME == "emotion_ori":
+        return PathsEmotionOri()
     return PathsEmotion6()
 
 

@@ -2,7 +2,7 @@
 Shared training entrypoint for base, extended, and attention variants.
 
 Control behavior in emotion_pipeline/config.py:
-- DATASET_NAME: "emotion6", "dvisa", or "emoset_new"
+- DATASET_NAME: "emotion6", "emotion_ori", "dvisa", or "emoset_new"
 - TRAIN_VARIANT: "base", "extended", or "attention"
 - TASK_MODE: "auto", "multitask", or "emotion_only"
 """
